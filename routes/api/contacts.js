@@ -10,7 +10,9 @@ const addSchema = Joi.object({
   phone: Joi.string().required(),
   favorite: Joi.boolean(),
 });
-
+const updateFavoriteSchema = Joi.object({
+  favorite: Joi.boolean().required(),
+});
 router.get("/", async (_, res, next) => {
   try {
     const result = await Contact.find();
@@ -41,7 +43,7 @@ router.post("/", async (req, res, next) => {
   try {
     const { error } = addSchema.validate(req.body);
     if (error) {
-      throw new RequestError(400, error.message);
+      throw RequestError(400, error.message);
     }
     const result = await Contact.create(req.body);
     res.status(201).json(result);
@@ -67,21 +69,51 @@ router.delete("/:contactId", async (req, res, next) => {
   }
 });
 
-// router.put("/:contactId", async (req, res, next) => {
-//   try {
-//     const { error } = addSchema.validate(req.body);
-//     if (error) {
-//       throw new RequestError(400, error.message);
-//     }
-//     const { contactId } = req.params;
-//     const result = await contacts.updateContact(contactId, req.body);
-//     if (!result) {
-//       throw RequestError(404, "Not found");
-//     }
-//     res.json(result);
-//   } catch (error) {
-//     next(error);
-//   }
-// });
+router.put("/:contactId", async (req, res, next) => {
+  try {
+    const { error } = addSchema.validate(req.body);
+    if (error) {
+      throw RequestError(400, error.message);
+    }
+    const { contactId } = req.params;
+    const isValideId = isValidObjectId(contactId);
+    if (!isValideId) {
+      throw RequestError(404, `id ${contactId} is not valid`);
+    }
+    const result = await Contact.findByIdAndUpdate(contactId, req.body, {
+      new: true,
+    });
+    if (!result) {
+      throw RequestError(404, "Not found");
+    }
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
 
+router.patch("/:contactId/favorite", async (req, res, next) => {
+  try {
+    const { error } = updateFavoriteSchema.validate(req.body);
+
+    if (error) {
+      throw RequestError(400, "missing field favorite");
+    }
+
+    const { contactId } = req.params;
+    const isValideId = isValidObjectId(contactId);
+    if (!isValideId) {
+      throw RequestError(404, `id ${contactId} is not valid`);
+    }
+    const result = await Contact.findByIdAndUpdate(contactId, req.body, {
+      new: true,
+    });
+    if (!result) {
+      throw RequestError(404, "Not found");
+    }
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
 module.exports = router;
