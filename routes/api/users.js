@@ -5,6 +5,7 @@ const router = express.Router();
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const { SECRET_KEY } = process.env;
+const authenticate = require("../../middlewares/authenticate");
 
 const Joi = require("joi");
 const userSchema = Joi.object({
@@ -49,15 +50,18 @@ router.post("/login", async (req, res, next) => {
     if (!user) {
       throw RequestError(401, "Email or password is wrong");
     }
-    const hashPassword = await bcrypt.hash(password, bcrypt.genSaltSync(10));
-    const result = await User.create({
-      email,
-      password: hashPassword,
-      subscription,
-    });
+    const passwordCompare = await bcrypt.compare(password, user.password);
+    if (!passwordCompare) {
+      throw RequestError(401, "Email or password is wrong");
+    }
+    const payload = {
+      id: user._id,
+    };
+    const token = jwt.sign(payload, SECRET_KEY);
     res.status(201).json({
-      email: result.email,
-      subscription: result.subscription,
+      token,
+      email: user.email,
+      subscription: user.subscription,
     });
   } catch (error) {
     next(error);
