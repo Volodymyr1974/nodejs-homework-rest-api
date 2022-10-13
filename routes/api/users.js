@@ -58,6 +58,7 @@ router.post("/login", async (req, res, next) => {
       id: user._id,
     };
     const token = jwt.sign(payload, SECRET_KEY);
+    await User.findByIdAndUpdate(user._id, { token });
     res.status(201).json({
       token,
       email: user.email,
@@ -66,5 +67,18 @@ router.post("/login", async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+});
+router.get("/logout", authenticate, async (req, res, next) => {
+  const { _id } = req.user;
+  await User.findByIdAndUpdate(_id, { token: "" });
+  res.status(204).json();
+});
+
+router.get("/current", authenticate, async (req, res, next) => {
+  const { email, subscription } = req.user;
+  res.json({
+    email,
+    subscription,
+  });
 });
 module.exports = router;

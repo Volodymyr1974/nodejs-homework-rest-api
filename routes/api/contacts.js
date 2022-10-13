@@ -15,9 +15,10 @@ const addSchema = Joi.object({
 const updateFavoriteSchema = Joi.object({
   favorite: Joi.boolean().required(),
 });
-router.get("/", authenticate, async (_, res, next) => {
+router.get("/", authenticate, async (req, res, next) => {
   try {
-    const result = await Contact.find();
+    const { _id: owner } = req.user;
+    const result = await Contact.find({ owner });
     res.json(result);
   } catch (error) {
     next(error);
@@ -47,7 +48,8 @@ router.post("/", authenticate, async (req, res, next) => {
     if (error) {
       throw RequestError(400, error.message);
     }
-    const result = await Contact.create(req.body);
+    const { _id: owner } = req.user;
+    const result = await Contact.create({ ...req.body, owner });
     res.status(201).json(result);
   } catch (error) {
     next(error);
@@ -57,11 +59,15 @@ router.post("/", authenticate, async (req, res, next) => {
 router.delete("/:contactId", authenticate, async (req, res, next) => {
   try {
     const { contactId } = req.params;
+    // const { _id: owner } = req.user;
+    // console.log(req.user);
+    // console.log(req.params);
     const isValideId = isValidObjectId(contactId);
     if (!isValideId) {
       throw RequestError(404, `id ${contactId} is not valid`);
     }
-    const result = await Contact.findByIdAndRemove(contactId);
+
+    const result = await Contact.findOneAndRemove(contactId);
     if (!result) {
       throw RequestError(404, "Not found");
     }
