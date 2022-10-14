@@ -1,6 +1,8 @@
 const express = require("express");
 const { isValidObjectId } = require("mongoose");
 const Contact = require("../../models/contact");
+const authenticate = require("../../middlewares/authenticate");
+
 const { RequestError } = require("../../helpers");
 const router = express.Router();
 const Joi = require("joi");
@@ -13,16 +15,17 @@ const addSchema = Joi.object({
 const updateFavoriteSchema = Joi.object({
   favorite: Joi.boolean().required(),
 });
-router.get("/", async (_, res, next) => {
+router.get("/", authenticate, async (req, res, next) => {
   try {
-    const result = await Contact.find();
+    const { _id: owner } = req.user;
+    const result = await Contact.find({ owner });
     res.json(result);
   } catch (error) {
     next(error);
   }
 });
 
-router.get("/:contactId", async (req, res, next) => {
+router.get("/:contactId", authenticate, async (req, res, next) => {
   try {
     const { contactId } = req.params;
     const isValideId = isValidObjectId(contactId);
@@ -39,27 +42,30 @@ router.get("/:contactId", async (req, res, next) => {
   }
 });
 
-router.post("/", async (req, res, next) => {
+router.post("/", authenticate, async (req, res, next) => {
   try {
     const { error } = addSchema.validate(req.body);
     if (error) {
       throw RequestError(400, error.message);
     }
-    const result = await Contact.create(req.body);
+    const { _id: owner } = req.user;
+    const result = await Contact.create({ ...req.body, owner });
     res.status(201).json(result);
   } catch (error) {
     next(error);
   }
 });
 
-router.delete("/:contactId", async (req, res, next) => {
+router.delete("/:contactId", authenticate, async (req, res, next) => {
   try {
     const { contactId } = req.params;
+
     const isValideId = isValidObjectId(contactId);
     if (!isValideId) {
       throw RequestError(404, `id ${contactId} is not valid`);
     }
-    const result = await Contact.findByIdAndRemove(contactId);
+
+    const result = await Contact.findOneAndRemove(contactId);
     if (!result) {
       throw RequestError(404, "Not found");
     }
@@ -69,7 +75,7 @@ router.delete("/:contactId", async (req, res, next) => {
   }
 });
 
-router.put("/:contactId", async (req, res, next) => {
+router.put("/:contactId", authenticate, async (req, res, next) => {
   try {
     const { error } = addSchema.validate(req.body);
     if (error) {
@@ -92,7 +98,7 @@ router.put("/:contactId", async (req, res, next) => {
   }
 });
 
-router.patch("/:contactId/favorite", async (req, res, next) => {
+router.patch("/:contactId/favorite", authenticate, async (req, res, next) => {
   try {
     const { error } = updateFavoriteSchema.validate(req.body);
 
