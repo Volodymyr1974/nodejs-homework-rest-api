@@ -1,9 +1,11 @@
 const express = require("express");
 const User = require("../../models/user");
-const { RequestError } = require("../../helpers");
+const { RequestError, sendEmail } = require("../../helpers");
+const { BASE_URL } = process.env;
 const router = express.Router();
 const jwt = require("jsonwebtoken");
 const gravatar = require("gravatar");
+const { nanoid } = require("nanoid");
 const bcrypt = require("bcryptjs");
 const { SECRET_KEY } = process.env;
 const authenticate = require("../../middlewares/authenticate");
@@ -17,7 +19,9 @@ const userSchema = Joi.object({
   email: Joi.string().required(),
   password: Joi.string().min(6).required(),
 });
-
+const verifyEmailSchema = Joi.object({
+  email: Joi.string().required(),
+});
 router.post("/register", async (req, res, next) => {
   try {
     const { error } = userSchema.validate(req.body);
@@ -31,12 +35,20 @@ router.post("/register", async (req, res, next) => {
     }
     const hashPassword = await bcrypt.hash(password, bcrypt.genSaltSync(10));
     const avatarURL = gravatar.url(email);
+    const verificationToken = nanoid();
     const result = await User.create({
       email,
       password: hashPassword,
       subscription,
       avatarURL,
+      verificationToken,
     });
+    const mail = {
+      to: email,
+      subject: "Підтвердження реєстрації",
+      html: `<a target="_blank" href="${BASE_URL}/api/users/verify/${verificationToken}" >Натисніть для підтвердження</a>`,
+    };
+    await sendEmail(mail);
     res.status(201).json({
       email: result.email,
       subscription: result.subscription,
@@ -44,6 +56,48 @@ router.post("/register", async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+});
+
+router.get("/verify/:verificationToken", async (req, res, next) => {
+  const { verificationToken } = req.params;
+  try {
+    const user = await User.findOne({ verificationToken });
+    if (!user) {
+      throw RequestError(404, "User not found");
+    }
+    await User.findByIdAndUpdate(user._id, {
+      verify: true,
+      verificationToken: "",
+    });
+    res.json({
+      message: "Verification successful",
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+router.post("/verify", async (req, res, next) => {
+  const { error } = verifyEmailSchema.validate(req.body);
+  if (error) {
+    throw RequestError(400, "missing required field email");
+  }
+  const { email } = req.body;
+  const user = await User.findOne({ email });
+  if (!user) {
+    throw RequestError(404, "User not found");
+  }
+  if (user.verify) {
+    throw RequestError(400, "Verification has already been passed");
+  }
+  const mail = {
+    to: email,
+    subject: "Підтвердження реєстрації",
+    html: `<a target="_blank" href="${BASE_URL}/api/users/verify/${user.verificationToken}" >Натисніть для підтвердження</a>`,
+  };
+  await sendEmail(mail);
+  res.json({
+    message: "Verification email sent",
+  });
 });
 
 router.post("/login", async (req, res, next) => {
@@ -56,6 +110,9 @@ router.post("/login", async (req, res, next) => {
     const user = await User.findOne({ email });
     if (!user) {
       throw RequestError(401, "Email or password is wrong");
+    }
+    if (!user.verify) {
+      throw RequestError(401, "Email is not verify");
     }
     const passwordCompare = await bcrypt.compare(password, user.password);
     if (!passwordCompare) {
